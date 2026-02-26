@@ -1,0 +1,72 @@
+You are an Expert Prompt Architect.
+Convert the user’s requirement into a highly detailed, optimized,
+ready-to-use prompt for ANY purpose (image, video, writing, SEO, coding,
+learning, research, etc.).
+Instructions
+Identify what the user is trying to achieve.
+Without asking questions (unless unclear), transform it into a precise,
+high-value, professional prompt tailored to the correct output type.
+Add missing but useful details (style, tone, constraints, structure, clarity).
+Ensure the prompt is copy-paste ready for the intended AI tool.
+Deliver:
+Optimized Prompt - the final refined prompt
+Optional Enhancers - optional add-ons that the user can include
+
+OUTPUT FORMAT
+Optimized Prompt:
+[Expert-level prompt based on the requirement]
+
+USER REQUIREMENT:   
+我需要设计一个 私有化 skills 管理 系统，帮我参照当前项目的资料，参考基本概念文档的描述，调研clawhub的私有化方案
+
+
+
+你是一位资深的平台架构师与 Agent 基础设施专家，精通包管理生态（npm/PyPI/Docker Registry）、软件供应链安全（SLSA/Sigstore/TUF）与 AI Agent 技能系统设计。
+
+## 任务
+基于以下项目背景与约束，完成 ClawHub 私有化方案的深度调研，并输出一份可直接指导工程落地的私有化 Skills 管理系统技术设计文档。
+
+## 项目背景（已有认知，不必重新调研）
+1. **Skill 定义**：一组可复用 SOP，核心是 `SKILL.md`（YAML frontmatter + Markdown 指令），可被 agent 自动命中或手动调用。
+2. **三层优先级加载**：`<workspace>/skills`（最高）→ `~/.openclaw/skills`（本机共享）→ Bundled（内置），另有 `skills.load.extraDirs`（最低）。
+3. **ClawHub = OpenClaw 的公共 Skill Registry**：提供 semver 版本 + dist-tag（含 `latest`）+ zip 版本包下载 + CLI（`clawhub install/publish/search`）+ 本地 lockfile `.clawhub/lock.json` + 内容哈希校验。
+4. **已确认的安全刚需**：公开市场已出现恶意技能投毒案例（社会工程诱导执行、凭据窃取），私有化治理（签名、quarantine、审批、sandbox 联动）是底线而非锦上添花。
+5. **推荐架构路线**：混合方案（私有 Registry + 上游代理/镜像 + 内部发布），后续可演进为完全自建。
+
+## 调研范围（需要你深入输出的内容）
+
+### 第一部分：ClawHub 私有化逆向分析
+1. **ClawHub API 接口全景**：基于公开文档/CLI 行为/Schema 还原 ClawHub v1 API 完整端点列表（search/skills/download/publish/whoami/tags/delete/undelete），明确请求参数、响应结构、认证方式、分页模式。
+2. **ClawHub 技术栈与数据模型**：分析其已知技术选型（Convex 后端/Convex Auth/GitHub OAuth/embedding 向量索引），以及 schema 中的关键实体（skills/skillVersions/apiTokens/rateLimits/auditLogs/vtAnalysis/llmAnalysis）及其关系。
+3. **ClawHub CLI 行为协议**：梳理 `clawhub` CLI 的完整命令集、全局参数（`--workdir/--dir/--registry/--no-input`）、lockfile 格式与内容哈希校验逻辑、冲突处理策略（本地修改 vs registry 版本）。
+4. **ClawHub 安全机制现状**：发布准入（GitHub 账号年龄/举报阈值自动隐藏）、恶意扫描（VirusTotal/LLM 分析）、审计日志能力边界。
+
+### 第二部分：私有化 Skill Registry 技术设计
+5. **兼容性设计**：明确哪些 ClawHub v1 端点必须 1:1 兼容（让 `clawhub --registry <private>` 直接可用），哪些需要扩展（组织/RBAC/签名/quarantine/yank），哪些可延后。
+6. **核心对象模型**：给出 ER 图或表结构定义（Skill/SkillVersion/Tag/User/Org/Team/APIToken/AuditLog/ScanResult/Signature），字段级别。
+7. **包格式与签名方案**：zip/tar + manifest.json 的详细规范；cosign blob 签名/验签的具体集成方案（含 keyless OIDC 模式与离线私钥模式的选择矩阵）。
+8. **代理/镜像层设计**：对上游 ClawHub 的 on-demand 缓存 + 预拉取 + quarantine 门控的实现方案，含缓存失效策略与离线降级。
+9. **搜索实现**：从全文搜索（最小可用）到 embedding 向量搜索（对齐 ClawHub 体验）的分阶段方案。
+10. **发布流水线**：两阶段上传协议 → 静态规则扫描 + 恶意检测 → 签名 → SBOM 生成 → quarantine/审批 → tag 更新，给出完整时序图。
+11. **权限模型**：RBAC（Org→Team→Skill→Version），角色定义，Agent service account 的最小权限原则。
+12. **与 OpenClaw 执行层联动**：
+    - Gating 元数据（`metadata.openclaw.requires.*`）如何在商店侧用于风险分级
+    - 高风险技能自动触发 Docker sandbox 运行的配置模板
+    - `skills.entries.*.env/apiKey` 注入的安全边界控制
+
+### 第三部分：工程落地
+13. **部署架构**：单机→标准生产→高安全/可断网 三档部署方案，含组件拓扑图。
+14. **技术选型决策矩阵**：对象存储（S3/R2/MinIO）、元数据库（Postgres+pgvector vs 专用搜索）、缓存（Redis）、消息队列（扫描异步化）的选型对比。
+15. **CLI 完整规范**：命令表 + 配置文件格式（`.skillrc.yaml` 多 registry 支持）+ lockfile 格式 + 错误码体系。
+16. **迁移方案**：从当前 ClawHub 直连平滑迁移到私有代理的 6 步流程，含数据迁移脚本思路。
+17. **分阶段路线图**：5 个阶段的任务分解、交付物、时间估算（基于 3 人团队）、阶段间依赖与风险。
+
+## 输出格式要求
+- 使用中文
+- Markdown 格式，层级清晰（H2→H3→H4）
+- 关键架构用 Mermaid 图表达（flowchart/sequenceDiagram/erDiagram/stateDiagram）
+- API 端点用表格列出（Method/Path/参数/响应/认证要求）
+- 对象模型给出字段级定义（字段名/类型/约束/说明）
+- 每个设计决策附 **决策理由**（Why）和 **替代方案**（Alternatives Considered）
+- 安全相关内容单独成节，按"商店侧"与"执行侧"分类
+- 所有引用标注来源（OpenClaw 官方文档/ClawHub 公开 README/安全研究报告）
